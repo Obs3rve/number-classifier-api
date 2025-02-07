@@ -1,3 +1,1 @@
-venv/ # Ensure venv is ignored by Git
-venv/ # Ensure venv is ignored by Git
-venv/ # Ensure venv is ignored by Git
+venv
