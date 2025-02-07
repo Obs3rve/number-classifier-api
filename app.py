@@ -1,61 +1,104 @@
-from flask import Flask, request, jsonify
+from fastapi import FastAPI, Query, HTTPException, Request
+from fastapi.responses import JSONResponse
 import requests
-import math  # Import math for rounding floating-point numbers
+from typing import List
+from fastapi.middleware.cors import CORSMiddleware
 
-app = Flask(__name__)
+app = FastAPI()
+
+# CORS configuration
+origins = [
+    "http://localhost",
+    "http://localhost:8080",
+    "*",  # Allows requests from any origin (USE WITH CAUTION IN PRODUCTION)
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 def is_prime(n: int) -> bool:
     """Check if a number is prime."""
     if n < 2:
         return False
-    for i in range(2, int(n ** 0.5) + 1):
+    for i in range(2, int(abs(n) ** 0.5) + 1):
         if n % i == 0:
             return False
     return True
 
-def is_perfect(n: int) -> bool:
-    """Check if a number is a perfect number."""
-    return n > 1 and sum(i for i in range(1, n) if n % i == 0) == n
-
 def is_armstrong(n: int) -> bool:
     """Check if a number is an Armstrong number."""
-    digits = [int(d) for d in str(abs(n))]  # Take absolute value for digit calculation
-    return sum(d ** len(digits) for d in digits) == abs(n)
+    num_str = str(abs(n))
+    digits = [int(d) for d in num_str]
+    power = len(digits)
+    return sum(d ** power for d in digits) == abs(n)
+
+def digit_sum(n: int) -> int:
+    """Calculate the sum of the digits of a number."""
+    return sum(int(d) for d in str(abs(n)))
 
 def get_fun_fact(n: int) -> str:
-    """Fetch a fun fact about the number from NumbersAPI."""
-    response = requests.get(f"http://numbersapi.com/{n}/math")
-    return response.text if response.status_code == 200 else "No fact found."
+    """Fetch a fun fact about a number from the Numbers API."""
+    try:
+        response = requests.get(f"http://numbersapi.com/{n}/math")
+        response.raise_for_status()
+        return response.text
+    except requests.exceptions.RequestException:
+        return "No fun fact available."
 
-@app.route("/api/classify-number", methods=["GET"])
-def classify_number():
-    """API endpoint to classify numbers."""
-    number_param = request.args.get("number")
+@app.exception_handler(ValueError)
+async def value_error_handler(request: Request, exc: ValueError):
+    return JSONResponse(
+        status_code=400,
+        content={"number": request.query_params.get("number", ""), "error": True},
+    )
+
+@app.get("/api/classify-number")
+def classify_number(number: str = Query(..., description="Enter a number")):
+    """
+    API endpoint to classify a number.
+    
+    Accepts numbers in different formats (negative, string, float, etc.).
+    """
+    original_input = number  # Store the exact user input
 
     try:
-        # Convert to float first to handle floating-point values
-        number = float(number_param)
-
-        # If it's a floating-point number, round it to the nearest integer
-        rounded_number = round(number)
-
-        properties = []
-        if is_armstrong(rounded_number):
-            properties.append("armstrong")
-        properties.append("odd" if rounded_number % 2 else "even")
-
-        return jsonify({
-            "number": rounded_number,  # Return the rounded number
-            "is_prime": is_prime(rounded_number),
-            "is_perfect": is_perfect(rounded_number),
-            "properties": properties,
-            "digit_sum": sum(int(d) for d in str(abs(rounded_number))),  # Use absolute value
-            "fun_fact": get_fun_fact(rounded_number)
-        }), 200  # Ensure 200 OK for valid numbers
-
+        # Convert input to an integer, even if it's a float or string
+        parsed_number = int(float(number))  
     except ValueError:
-        return jsonify({"number": "invalid", "error": True}), 400  # Keep 400 for truly invalid inputs
+        raise ValueError("Invalid input")
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8000)
+    is_negative = parsed_number < 0
+    abs_number = abs(parsed_number)
+
+    properties: List[str] = []
+    is_armstrong_num = is_armstrong(abs_number)
+    is_odd = abs_number % 2 != 0
+
+    if is_armstrong_num and is_odd:
+        properties = ["armstrong", "odd"]
+    elif is_armstrong_num and not is_odd:
+        properties = ["armstrong", "even"]
+    elif is_odd:
+        properties = ["odd"]
+    else:
+        properties = ["even"]
+
+    return {
+        "number": parsed_number,
+        "is_prime": is_prime(abs_number),
+        "is_perfect": False,  # No perfect number check in this version
+        "properties": properties,
+        "digit_sum": digit_sum(abs_number),
+        "fun_fact": get_fun_fact(abs_number),
+    }
+
+# Run the app with Uvicorn
+if __name__ == "__app__":
+    import uvicorn
+    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
 
