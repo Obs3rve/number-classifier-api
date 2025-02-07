@@ -54,8 +54,7 @@ def classify_number():
         }), 200  # Ensure 200 OK for valid numbers
 
     except ValueError:
-        return jsonify({"number": "invalid", "error": True}), 400  # Keep 400 for truly invalid 
-inputs
+        return jsonify({"number": "invalid", "error": True}), 400  # Keep 400 for truly invalid inputs
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000)
